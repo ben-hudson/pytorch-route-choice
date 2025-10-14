@@ -16,10 +16,14 @@ def test_values_and_probs(small_network):
 
     rewards = -torch_graph.cost.unsqueeze(0)
     sink_node_mask = torch_graph.is_dest.type_as(rewards).unsqueeze(0)
-    initial_values = sink_node_mask.clone()
 
     exp_values, _ = fixed_point(
-        torch_graph.edge_index, rewards.exp(), sink_node_mask, initial_values, f_solver="fixed_point_iter", f_tol=1e-5
+        torch_graph.edge_index,
+        rewards.exp(),
+        sink_node_mask,
+        sink_node_mask.clone(),
+        f_solver="fixed_point_iter",
+        f_tol=1e-5,
     )
     values = exp_values.log()
     assert torch.isclose(values, torch_graph.value, atol=1e-4).all()

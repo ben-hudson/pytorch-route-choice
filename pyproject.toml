@@ -13,9 +13,10 @@ dependencies = [
     "networkx",
     "pytest-cov",
     "pytest",
+    "scipy", # required for tests
     "torch_geometric",
     "torch",
-    "torchdeq"
+    "torchdeq",
 ]
 
 [tool.setuptools_scm]
