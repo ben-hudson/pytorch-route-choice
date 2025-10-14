@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "route-choice"
+version = "0.0.0"  # Placeholder, will be overridden by setuptools-scm (hopefully)
+authors = [
+    {name = "Ben Hudson", email = "benhudson@fastmail.com"}
+]
+license = {file = "LICENSE"}
+dependencies = [
+    "networkx",
+    "pytest-cov",
+    "pytest",
+    "torch_geometric",
+    "torch",
+    "torchdeq"
+]
+
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "node-and-date"
