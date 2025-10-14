@@ -48,6 +48,9 @@ class LinearFixedPoint(MessagePassing):
         if "f_tol" not in solver_kwargs:
             solver_kwargs["f_tol"] = 1e-6
 
+        b = b.type_as(A_values)
+        x0 = x0.type_as(A_values)
+
         solver = torchdeq.get_deq(**solver_kwargs)
         fixed_point = lambda x: self.propagate(A_indices, A=A_values, b=b, x=x)
         x_list, info = solver(fixed_point, x0)
