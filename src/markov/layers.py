@@ -10,37 +10,38 @@ class LinearFixedPoint(MessagePassing):
 
     This class implements a linear fixed-point solver using PyTorch Geometric's MessagePassing
     framework. It iteratively solves equations of the form x = Ax + b, where A is a sparse
-    matrix represented via edge indices and values, and b is a vector.
+    matrix represented via edge indices and values (COO format), and b is a vector.
 
     Args:
         **kwargs: Additional keyword arguments passed to MessagePassing base class.
 
     Methods:
-        forward(edge_index, A, b, x0, **solver_kwargs):
+        forward(A_indices, A_values, b, x0, **solver_kwargs):
             Solves the fixed-point problem using the specified solver.
 
             Args:
-                edge_index (torch.Tensor): Edge indices of shape [2, num_edges] defining the sparse matrix structure
-                A (torch.Tensor): Edge weights/values of shape [num_edges]
+                A_indices (torch.Tensor): Indices of shape [2, num_edges]
+                A_values (torch.Tensor): Values of shape [num_edges]
                 b (torch.Tensor): Bias vector of shape [num_nodes]
                 x0 (torch.Tensor): Initial guess for the solution of shape [num_nodes]
                 **solver_kwargs: Additional arguments passed to the DEQ solver
 
             Returns:
-                tuple: (solution, trajectory, solver_info) where:
+                tuple: (solution, solver_info) where:
                     - solution is the final fixed point x*
-                    - trajectory is list of intermediate solutions
                     - solver_info contains solver statistics
 
     Examples:
         >>> solver = LinearFixedPoint()
-        >>> x_star, traj, info = solver(edge_index, A, b, x0, solver='anderson', tol=1e-6)
+        >>> x_star, info = solver(A.indices(), A.values(), b, x0)
     """
 
     def __init__(self, **kwargs):
         super().__init__(aggr="sum", flow="target_to_source", **kwargs)
 
-    def forward(self, edge_index: torch.Tensor, A: torch.Tensor, b: torch.Tensor, x0: torch.Tensor, **solver_kwargs):
+    def forward(
+        self, A_indices: torch.Tensor, A_values: torch.Tensor, b: torch.Tensor, x0: torch.Tensor, **solver_kwargs
+    ):
         # some sensible defaults
         if "f_solver" not in solver_kwargs:
             solver_kwargs["f_solver"] = "fixed_point_iter"
@@ -48,10 +49,10 @@ class LinearFixedPoint(MessagePassing):
             solver_kwargs["f_tol"] = 1e-6
 
         solver = torchdeq.get_deq(**solver_kwargs)
-        fixed_point = lambda x: self.propagate(edge_index, A=A, b=b, x=x)
+        fixed_point = lambda x: self.propagate(A_indices, A=A_values, b=b, x=x)
         x_list, info = solver(fixed_point, x0)
 
-        return x_list[-1], x_list, info
+        return x_list[-1], info
 
     def message(self, A: torch.Tensor, x_j: torch.Tensor):
         return A * x_j
