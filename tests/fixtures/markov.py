@@ -1,7 +1,7 @@
 import networkx as nx
 import pytest
 
-from markov import load_rl_tutorial_network
+from route_choice.markov.dataset import load_rl_tutorial_network
 
 
 def load_small_acyclic_network():

@@ -2,7 +2,7 @@ import pytest
 import networkx as nx
 import torch_geometric.utils
 
-from purc.utils import dense_incidence_matrix
+from route_choice.purc.utils import dense_incidence_matrix
 
 
 @pytest.mark.parametrize("n_nodes, p", [(10, 0.4), (100, 0.2), (1000, 0.1)])

@@ -1,7 +1,7 @@
 import torch
 import tqdm
 
-from markov import MarkovRouteChoice, MarkovRouteChoiceDataset, load_rl_tutorial_network
+from route_choice import MarkovRouteChoice, MarkovRouteChoiceDataset, load_rl_tutorial_network
 from sklearn.preprocessing import StandardScaler
 
 if __name__ == "__main__":

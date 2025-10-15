@@ -2,7 +2,7 @@ import torch
 import torch_geometric.utils
 import tqdm
 
-from purc import dense_incidence_matrix, load_purc_toy_network, PURC
+from route_choice import dense_incidence_matrix, load_purc_toy_network, PURC
 from sklearn.preprocessing import StandardScaler
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import torch
 import tqdm
 
-from markov import MarkovRouteChoice, MarkovRouteChoiceDataset, load_rl_tutorial_network
+from route_choice import MarkovRouteChoice, MarkovRouteChoiceDataset, load_rl_tutorial_network
 from sklearn.preprocessing import StandardScaler
 
 # MaxEnt IRL (Ziebart et al., 2008) is almost the same as the Recursive Logit (Fosgerau et al., 2013) model.
