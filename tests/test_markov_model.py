@@ -44,7 +44,7 @@ def test_flows(rl_tutorial_network):
         f_tol=1e-5,
     )
 
-    demand = torch_graph.is_orig.type_as(rewards).unsqueeze(0) * 100
+    demand = torch_graph.is_orig.type_as(probs).unsqueeze(0) * 100
     node_flows, edge_flows = model.get_flows(
         torch_graph.edge_index,
         probs,
