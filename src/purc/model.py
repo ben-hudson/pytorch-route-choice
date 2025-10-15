@@ -1,18 +1,6 @@
 import torch
 
 
-def dense_incidence_matrix(edge_index: torch.Tensor, n_nodes: int = None, n_edges: int = None):
-    if n_nodes is None:
-        n_nodes = torch.unique(edge_index).size(0)
-    if n_edges:
-        n_edges = edge_index.size(1)
-
-    incidence = torch.zeros((n_nodes, n_edges), dtype=torch.long)
-    incidence.scatter_(0, edge_index[0].unsqueeze(0), -1)
-    incidence.scatter_(0, edge_index[1].unsqueeze(0), 1)
-    return incidence
-
-
 class PURC(torch.nn.Module):
     def __init__(self, n_feats: int, regularizer: str = "entropy"):
         super().__init__()

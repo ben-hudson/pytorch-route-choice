@@ -13,6 +13,7 @@ dependencies = [
     "networkx",
     "pytest-cov",
     "pytest",
+    "scikit-learn", # required for examples
     "scipy", # required for tests
     "torch_geometric",
     "torch",

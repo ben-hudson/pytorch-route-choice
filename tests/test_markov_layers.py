@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch_geometric.utils
 
-from markov import EdgeProb, LinearFixedPoint
+from markov.layers import EdgeProb, LinearFixedPoint
 
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)

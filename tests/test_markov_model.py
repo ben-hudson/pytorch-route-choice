@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch_geometric.utils
 
-from markov import MarkovRouteChoice
+from markov.model import MarkovRouteChoice
 
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
