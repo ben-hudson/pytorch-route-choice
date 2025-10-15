@@ -32,20 +32,8 @@ class MarkovRouteChoiceDataset(TensorDataset):
         self.graph = torch_geometric.utils.from_networkx(nx_graph, group_edge_attrs=edge_feats)
 
         model = MarkovRouteChoice(None, -1)
-        values, edge_probs = model.get_values_and_probs(
-            self.graph.edge_index,
-            self.rewards.exp(),
-            self.sink_node_mask,
-            f_solver="fixed_point_iter",
-            f_tol=1e-5,
-        )
-        node_flows, edge_flows = model.get_flows(
-            self.graph.edge_index,
-            edge_probs,
-            self.demand,
-            f_solver="fixed_point_iter",
-            f_tol=1e-5,
-        )
+        values, edge_probs = model.get_values_and_probs(self.graph.edge_index, self.rewards.exp(), self.sink_node_mask)
+        node_flows, edge_flows = model.get_flows(self.graph.edge_index, edge_probs, self.demand)
 
         source_list = []
         path_list = []
@@ -98,10 +86,6 @@ class MarkovRouteChoiceDataset(TensorDataset):
     @property
     def edge_index(self):
         return self.graph.edge_index
-
-    @property
-    def feats(self):
-        return self.graph.edge_attr.unsqueeze(0)
 
     @property
     def sink_node_mask(self):
