@@ -1,15 +1,25 @@
 import torch
 
-from .layers import EdgeProb, LinearFixedPoint
+from ..layers import EdgeProb, LinearFixedPoint
 
 
-class MarkovRouteChoice(torch.nn.Module):
+class RLFixedPoint(LinearFixedPoint):
+    def update(self, Ax: torch.Tensor, b: torch.Tensor):
+        # In the recursive logit model b is a one-hot vector indicating the terminal state
+        # There are  no edges leaving the terminal state, and its value is always 0 (exp(0) = 1).
+        # To avoid modifying the underlying network, we can just override the value at the terminal state.
+        Ax[b.bool()] = 1.0
+        return Ax
+
+
+class RecursiveLogitRouteChoice(torch.nn.Module):
     def __init__(self, encoder: torch.nn.Module, node_dim: int = -1):
         super().__init__()
 
         self.node_dim = node_dim
 
         self.encoder = encoder
+        self.node_value = RLFixedPoint(node_dim=self.node_dim)
         self.fixed_point = LinearFixedPoint(node_dim=self.node_dim)
         self.edge_prob = EdgeProb(node_dim=self.node_dim)
 
@@ -23,7 +33,7 @@ class MarkovRouteChoice(torch.nn.Module):
     def get_values_and_probs(
         self, edge_index: torch.Tensor, exp_rewards: torch.Tensor, sink_node_mask: torch.Tensor, **solver_kwargs
     ):
-        exp_values, _ = self.fixed_point(
+        exp_values, _ = self.node_value(
             edge_index, exp_rewards, sink_node_mask, sink_node_mask.clone(), **solver_kwargs
         )
         assert (

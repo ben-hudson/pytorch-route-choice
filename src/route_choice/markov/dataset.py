@@ -5,7 +5,7 @@ import torch_geometric.utils
 from torch.utils.data import TensorDataset
 from typing import Any, Callable, Dict, List
 
-from .model import MarkovRouteChoice
+from .models import MarkovRouteChoice
 
 
 class SamplingException(BaseException):

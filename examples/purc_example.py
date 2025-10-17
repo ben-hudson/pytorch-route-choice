@@ -2,7 +2,7 @@ import torch
 import torch_geometric.utils
 import tqdm
 
-from route_choice import dense_incidence_matrix, load_purc_toy_network, PURC
+from route_choice import dense_incidence_matrix, load_purc_toy_network, PerturbedUtilityRouteChoice
 from sklearn.preprocessing import StandardScaler
 
 if __name__ == "__main__":
@@ -20,7 +20,7 @@ if __name__ == "__main__":
 
     incidence_matrix = dense_incidence_matrix(torch_graph.edge_index, torch_graph.num_nodes, torch_graph.num_edges)
 
-    model = PURC(len(feat_names), regularizer="entropy")
+    model = PerturbedUtilityRouteChoice(len(feat_names), regularizer="entropy")
     optim = torch.optim.Adam(model.parameters(), lr=1e-2)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optim, threshold=1e-4, threshold_mode="rel", patience=10, min_lr=1e-4

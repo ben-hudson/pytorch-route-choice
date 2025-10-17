@@ -1,7 +1,7 @@
 import torch
 
 
-class PURC(torch.nn.Module):
+class PerturbedUtilityRouteChoice(torch.nn.Module):
     def __init__(self, n_feats: int, regularizer: str = "entropy"):
         super().__init__()
 

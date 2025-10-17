@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch_geometric.utils
 
-from route_choice.markov.model import MarkovRouteChoice
+from route_choice.markov.models.recursive_logit import RecursiveLogitRouteChoice
 
 
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
@@ -11,7 +11,7 @@ def test_values_and_probs(small_network):
         small_network.nodes[n]["is_dest"] = n == 4
     torch_graph = torch_geometric.utils.from_networkx(small_network)
 
-    model = MarkovRouteChoice(None, node_dim=-1)
+    model = RecursiveLogitRouteChoice(None, node_dim=-1)
 
     rewards = -torch_graph.cost.unsqueeze(0)
     sink_node_mask = torch_graph.is_dest.unsqueeze(0)
@@ -32,7 +32,7 @@ def test_flows(rl_tutorial_network):
         rl_tutorial_network.nodes[n]["is_dest"] = n == "d"
     torch_graph = torch_geometric.utils.from_networkx(rl_tutorial_network)
 
-    model = MarkovRouteChoice(None, node_dim=-1)
+    model = RecursiveLogitRouteChoice(None, node_dim=-1)
 
     rewards = -2.0 * torch_graph.travel_time.unsqueeze(0) - 0.01
     sink_node_mask = torch_graph.is_dest.unsqueeze(0)
