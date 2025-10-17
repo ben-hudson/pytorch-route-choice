@@ -1,4 +1,5 @@
-from .recursive_logit import *
+from .recursive_logit import RecursiveLogitRouteChoice
+from .nested_recursive_logit import NestedRecursiveLogitRouteChoice
 
 # Alias for RecursiveLogitRouteChoice
 MarkovRouteChoice = RecursiveLogitRouteChoice
