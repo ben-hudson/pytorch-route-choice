@@ -1,3 +1,4 @@
+import itertools
 import pytest
 import torch
 import torch_geometric.utils
@@ -29,30 +30,36 @@ def test_no_scales(small_network):
 
 
 def test_nrl_model(nrl_toy_network):
-    for n in nrl_toy_network.nodes:
-        nrl_toy_network.nodes[n]["is_dest"] = n == "d"
     torch_graph = torch_geometric.utils.from_networkx(nrl_toy_network)
 
     model = NestedRecursiveLogitRouteChoice(None, node_dim=-1)
 
     rewards = -torch_graph.cost.unsqueeze(0)
-    reward_scales = torch_graph.scale.unsqueeze(0)
+    node_scales = torch_graph.scale.unsqueeze(0)
     sink_node_mask = torch_graph.is_dest.unsqueeze(0)
     values, probs = model.get_values_and_probs(
         torch_graph.edge_index,
         rewards,
-        reward_scales,
+        node_scales,
         sink_node_mask,
         f_solver="anderson",
         f_tol=1e-5,
     )
     probs = probs.squeeze(0)
-    print(values, list(zip(torch_graph.name, probs)))
 
-    paths = [("a", "a1"), ("a", "a2"), ("a", "a3"), ("b", "b1"), ("b", "b2"), ("b", "b3")]
+    paths = [
+        ("o", "a", "a1", "d"),
+        ("o", "a", "a2", "d"),
+        ("o", "a", "a3", "d"),
+        ("o", "b", "b1", "d"),
+        ("o", "b", "b2", "d"),
+        ("o", "b", "b3", "d"),
+    ]
     for path in paths:
         path_prob = 1.0
-        for edge in path:
-            edge_index = torch_graph.name.index(edge)
-            path_prob *= probs[edge_index]
-        print(path, path_prob)
+        for k, a in itertools.pairwise(path):
+            edge_head_mask = torch_graph.edge_index[0] == torch_graph.name.index(k)
+            edge_tail_mask = torch_graph.edge_index[1] == torch_graph.name.index(a)
+            selected_edge = edge_head_mask & edge_tail_mask
+
+            path_prob *= probs[selected_edge].item()

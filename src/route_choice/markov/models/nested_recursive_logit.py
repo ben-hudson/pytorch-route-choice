@@ -1,7 +1,6 @@
 import torch
 import torchdeq
 
-from ..layers import LinearFixedPoint
 from .recursive_logit import RLFixedPoint, RecursiveLogitRouteChoice
 
 
@@ -66,11 +65,6 @@ class NestedRecursiveLogitRouteChoice(RecursiveLogitRouteChoice):
         )
         values = z.log() * node_scales
 
-        # edge_probs = self.edge_prob(edge_index, exp_scaled_rewards, z)
-        # According to the paper the express route to computing P is
-        # TODO: apply this in the recursive logit model too
-        edge_head_z = z.index_select(self.node_dim, edge_index[0])
-        edge_tail_z = z.index_select(self.node_dim, edge_index[1])
-        edge_probs = exp_scaled_rewards * edge_tail_z / edge_head_z
+        edge_probs = self.edge_prob(edge_index, exp_scaled_rewards, z)
 
         return values, edge_probs
