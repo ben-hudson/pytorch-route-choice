@@ -55,3 +55,24 @@ def small_network(request: pytest.FixtureRequest):
 @pytest.fixture
 def rl_tutorial_network():
     return load_rl_tutorial_network()
+
+
+@pytest.fixture
+def nrl_toy_network():
+    G = nx.MultiDiGraph()
+
+    G.add_node("a", scale=1.0)
+    G.add_node("b", scale=0.5)  # this is the first nest
+    G.add_node("c", scale=0.8)  # this is the second nest
+    G.add_node("d", scale=1.0)
+
+    G.add_edge("a", "b", cost=1, name="a")
+    G.add_edge("b", "d", cost=1, name="a1")
+    G.add_edge("b", "d", cost=2, name="a2")
+    G.add_edge("b", "d", cost=3, name="a3")
+    G.add_edge("a", "c", cost=2, name="b")
+    G.add_edge("c", "d", cost=2, name="b1")
+    G.add_edge("c", "d", cost=1.5, name="b2")
+    G.add_edge("c", "d", cost=1, name="b3")
+
+    return G

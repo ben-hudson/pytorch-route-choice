@@ -1,17 +1,18 @@
 import torch
 import torchdeq
 
-from .recursive_logit import RLFixedPoint
+from ..layers import LinearFixedPoint
+from .recursive_logit import RLFixedPoint, RecursiveLogitRouteChoice
 
 
 class NRLFixedPoint(RLFixedPoint):
     def forward(
         self,
-        reward_indices: torch.Tensor,
-        reward_values: torch.Tensor,
-        reward_scales: torch.Tensor,
+        edge_index: torch.Tensor,
+        exp_scaled_rewards: torch.Tensor,
+        node_scales: torch.Tensor,
         sink_node_mask: torch.Tensor,
-        x0: torch.Tensor,
+        z0: torch.Tensor,
         **solver_kwargs
     ):
         # this fixed-point problem is non-linear, so we shouldn't use the same defaults as the base class
@@ -21,22 +22,21 @@ class NRLFixedPoint(RLFixedPoint):
             solver_kwargs["f_tol"] = 1e-6
 
         solver = torchdeq.get_deq(**solver_kwargs)
-        fixed_point = lambda x: self.propagate(reward_indices, r=reward_values, mu=reward_scales, b=sink_node_mask, x=x)
-        x_list, info = solver(fixed_point, x0.type_as(reward_values))
+        fixed_point = lambda z: self.propagate(edge_index, M=exp_scaled_rewards, mu=node_scales, b=sink_node_mask, z=z)
+        x_list, info = solver(fixed_point, z0.type_as(exp_scaled_rewards))
 
         return x_list[-1], info
 
-    def message(self, r: torch.Tensor, mu_i: torch.Tensor, mu_j: torch.Tensor, x_j: torch.Tensor):
-        M = (r / mu_i).exp()
-        z = x_j.pow(mu_j / mu_i)
-        return M * z
+    def message(self, M: torch.Tensor, mu_i: torch.Tensor, mu_j: torch.Tensor, z_j: torch.Tensor):
+        X = z_j.pow(mu_j / mu_i)
+        return M * X
 
 
-class NestedRecursiveLogitRouteChoice(torch.nn.Module):
+class NestedRecursiveLogitRouteChoice(RecursiveLogitRouteChoice):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.node_value = NRLFixedPoint(node_dim=self.node_dim)
+        self.node_value = NRLFixedPoint(node_dim=kwargs.get("node_dim", -1))
 
     def forward(
         self,
@@ -54,14 +54,23 @@ class NestedRecursiveLogitRouteChoice(torch.nn.Module):
         self,
         edge_index: torch.Tensor,
         rewards: torch.Tensor,
-        reward_scales: torch.Tensor,
+        node_scales: torch.Tensor,
         sink_node_mask: torch.Tensor,
         **solver_kwargs
     ):
-        exp_values, _ = self.node_value(
-            edge_index, rewards, reward_scales, sink_node_mask, sink_node_mask.clone(), **solver_kwargs
+
+        edge_scales = node_scales.index_select(self.node_dim, edge_index[0])
+        exp_scaled_rewards = (rewards / edge_scales).exp()
+        z, _ = self.node_value(
+            edge_index, exp_scaled_rewards, node_scales, sink_node_mask, sink_node_mask.clone(), **solver_kwargs
         )
+        values = z.log() * node_scales
 
-        edge_probs = self.edge_prob(edge_index, rewards, exp_values)
+        # edge_probs = self.edge_prob(edge_index, exp_scaled_rewards, z)
+        # According to the paper the express route to computing P is
+        # TODO: apply this in the recursive logit model too
+        edge_head_z = z.index_select(self.node_dim, edge_index[0])
+        edge_tail_z = z.index_select(self.node_dim, edge_index[1])
+        edge_probs = exp_scaled_rewards * edge_tail_z / edge_head_z
 
-        return exp_values.log(), edge_probs
+        return values, edge_probs
