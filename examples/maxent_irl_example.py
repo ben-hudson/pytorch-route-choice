@@ -45,8 +45,8 @@ if __name__ == "__main__":
             model.train()
             optim.zero_grad()
 
-            reward, value, prob = model(dataset.edge_index, feats, dataset.sink_node_mask)
-            node_flows, edge_flows = model.get_flows(dataset.edge_index, prob, dataset.demand)
+            reward, value, prob = model(dataset.edge_index, feats, dataset.sink_node_mask, ift=True)
+            node_flows, edge_flows = model.get_flows(dataset.edge_index, prob, dataset.demand, ift=True)
 
             # since we oly have one destination here, we can use the edge flows as calculated.
             # otherwise, I think we would have to compare the feature counts per-destination.

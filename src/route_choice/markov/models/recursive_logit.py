@@ -23,11 +23,13 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
         self.fixed_point = LinearFixedPoint(node_dim=self.node_dim)
         self.edge_prob = EdgeProb(node_dim=self.node_dim)
 
-    def forward(self, edge_index: torch.Tensor, edge_feats: torch.Tensor, sink_node_mask: torch.Tensor):
+    def forward(
+        self, edge_index: torch.Tensor, edge_feats: torch.Tensor, sink_node_mask: torch.Tensor, **solver_kwargs
+    ):
         # this isn't very efficient since we do .exp() after
         rewards = -torch.nn.functional.softplus(self.encoder(edge_feats)).squeeze(-1)
 
-        values, edge_probs = self.get_values_and_probs(edge_index, rewards.exp(), sink_node_mask)
+        values, edge_probs = self.get_values_and_probs(edge_index, rewards.exp(), sink_node_mask, **solver_kwargs)
         return rewards, values, edge_probs
 
     def get_values_and_probs(
@@ -36,9 +38,6 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
         exp_values, _ = self.node_value(
             edge_index, exp_rewards, sink_node_mask, sink_node_mask.clone(), **solver_kwargs
         )
-        assert (
-            exp_values[sink_node_mask] == 1
-        ), "Value at the terminal state is greater than zero. Maybe you forgot to remove outgoing edges?"
 
         edge_probs = self.edge_prob(edge_index, exp_rewards, exp_values)
 

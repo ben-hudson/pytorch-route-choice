@@ -35,7 +35,7 @@ if __name__ == "__main__":
             model.train()
             optim.zero_grad()
 
-            reward, value, prob = model(dataset.edge_index, feats, dataset.sink_node_mask)
+            reward, value, prob = model(dataset.edge_index, feats, dataset.sink_node_mask, ift=True)
             probs = prob.expand_as(paths)
             loss = -probs[paths.bool()].log().sum()
 
