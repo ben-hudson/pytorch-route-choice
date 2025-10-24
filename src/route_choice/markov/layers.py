@@ -93,15 +93,27 @@ class EdgeProb(MessagePassing):
     def __init__(self, **kwargs):
         super().__init__(aggr=None, flow="target_to_source", **kwargs)
 
-    def forward(self, edge_index: torch.Tensor, exp_rewards: torch.Tensor, exp_values: torch.Tensor):
-        prob = self.propagate(edge_index, exp_reward=exp_rewards, exp_value=exp_values)
+    def forward(
+        self,
+        edge_index: torch.Tensor,
+        exp_rewards: torch.Tensor,
+        exp_values: torch.Tensor,
+        sink_node_mask: torch.Tensor,
+    ):
+        prob = self.edge_updater(edge_index, exp_reward=exp_rewards, exp_value=exp_values, is_sink_node=sink_node_mask)
         return prob
 
-    def message(self, exp_reward: torch.Tensor, exp_value_j: torch.Tensor):
+    def edge_update(
+        self,
+        exp_reward: torch.Tensor,
+        exp_value_j: torch.Tensor,
+        is_sink_node_i: torch.Tensor,
+        index: torch.Tensor,
+        ptr: torch.Tensor = None,
+        dim_size: int = None,
+    ):
         exp_Q = exp_reward * exp_value_j
-        return exp_Q
-
-    def aggregate(self, inputs, index, ptr=None, dim_size=None):
-        sum_over_edges = scatter(inputs, index, dim=self.node_dim, reduce="sum")
-        prob = inputs / sum_over_edges.index_select(self.node_dim, index)
+        sum_over_edges = scatter(exp_Q, index, dim=self.node_dim, reduce="sum")
+        prob = exp_Q / sum_over_edges.index_select(self.node_dim, index)
+        prob[is_sink_node_i.bool()] = 0.0  # gotcha
         return prob

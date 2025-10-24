@@ -28,7 +28,7 @@ def test_values_and_probs(small_network):
     values = exp_values.log()
     assert torch.isclose(values, torch_graph.value, atol=1e-4).all()
 
-    probs = edge_prob(torch_graph.edge_index, rewards.exp(), exp_values)
+    probs = edge_prob(torch_graph.edge_index, rewards.exp(), exp_values, sink_node_mask)
     assert torch.isclose(probs, torch_graph.prob, atol=1e-4).all()
 
 
@@ -52,7 +52,7 @@ def test_flows(rl_tutorial_network):
         f_solver="fixed_point_iter",
         f_tol=1e-5,
     )
-    probs = edge_prob(torch_graph.edge_index, rewards.exp(), exp_values)
+    probs = edge_prob(torch_graph.edge_index, rewards.exp(), exp_values, sink_node_mask)
 
     demand = torch_graph.is_orig.type_as(rewards).unsqueeze(0) * 100
     node_flows, _ = fixed_point(

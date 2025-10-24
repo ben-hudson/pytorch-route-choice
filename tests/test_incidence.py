@@ -16,7 +16,7 @@ def test_dense_incidence_matrix(n_nodes, p):
 
 
 @pytest.mark.parametrize("n_nodes, p", [(10, 0.4), (100, 0.2), (1000, 0.1)])
-def test_dense_incidence_matrix(n_nodes, p):
+def test_sparse_incidence_matrix(n_nodes, p):
     nx_graph = nx.erdos_renyi_graph(n_nodes, p, directed=True)
     nx_incidence = nx.incidence_matrix(nx_graph, oriented=True).toarray()
 

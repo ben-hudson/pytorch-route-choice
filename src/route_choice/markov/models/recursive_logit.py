@@ -39,7 +39,7 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
             edge_index, exp_rewards, sink_node_mask, sink_node_mask.clone(), **solver_kwargs
         )
 
-        edge_probs = self.edge_prob(edge_index, exp_rewards, exp_values)
+        edge_probs = self.edge_prob(edge_index, exp_rewards, exp_values, sink_node_mask)
 
         return exp_values.log(), edge_probs
 
