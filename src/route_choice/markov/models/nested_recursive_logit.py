@@ -12,15 +12,8 @@ class NRLFixedPoint(RLFixedPoint):
         node_scales: torch.Tensor,
         sink_node_mask: torch.Tensor,
         z0: torch.Tensor,
-        **solver_kwargs
+        solver: torchdeq.core.DEQBase,
     ):
-        # this fixed-point problem is non-linear, so we shouldn't use the same defaults as the base class
-        if "f_solver" not in solver_kwargs:
-            solver_kwargs["f_solver"] = "anderson"
-        if "f_tol" not in solver_kwargs:
-            solver_kwargs["f_tol"] = 1e-6
-
-        solver = torchdeq.get_deq(**solver_kwargs)
         fixed_point = lambda z: self.propagate(edge_index, M=exp_scaled_rewards, mu=node_scales, b=sink_node_mask, z=z)
         x_list, info = solver(fixed_point, z0.type_as(exp_scaled_rewards))
 
@@ -61,7 +54,7 @@ class NestedRecursiveLogitRouteChoice(RecursiveLogitRouteChoice):
         edge_scales = node_scales.index_select(self.node_dim, edge_index[0])
         exp_scaled_rewards = (rewards / edge_scales).exp()
         z, _ = self.node_value(
-            edge_index, exp_scaled_rewards, node_scales, sink_node_mask, sink_node_mask.clone(), **solver_kwargs
+            edge_index, exp_scaled_rewards, node_scales, sink_node_mask, sink_node_mask.clone(), self.solver
         )
         values = z.log() * node_scales
 
