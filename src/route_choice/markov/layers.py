@@ -42,6 +42,9 @@ class LinearFixedPoint(MessagePassing):
     def forward(
         self, A_indices: torch.Tensor, A_values: torch.Tensor, b: torch.Tensor, x0: torch.Tensor, **solver_kwargs
     ):
+        assert A_values.dim() == b.dim() == x0.dim(), f"Expected A, b, and x0 to have same dimensionality."
+        assert A_values.dim() > 1, "Expected A, b, and x0 to have a batch dimension."
+
         # some sensible defaults
         if "f_solver" not in solver_kwargs:
             solver_kwargs["f_solver"] = "fixed_point_iter"
