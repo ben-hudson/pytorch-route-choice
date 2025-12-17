@@ -36,27 +36,25 @@ class LinearFixedPoint(MessagePassing):
         >>> x_star, info = solver(A.indices(), A.values(), b, x0)
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(aggr="sum", flow="target_to_source", **kwargs)
-
-    def forward(
-        self, A_indices: torch.Tensor, A_values: torch.Tensor, b: torch.Tensor, x0: torch.Tensor, **solver_kwargs
-    ):
-        assert A_values.dim() == b.dim() == x0.dim(), f"Expected A, b, and x0 to have same dimensionality."
-        assert A_values.dim() > 1, "Expected A, b, and x0 to have a batch dimension."
+    def __init__(self, node_dim: int = -1, **solver_kwargs):
+        super().__init__(aggr="sum", flow="target_to_source", node_dim=node_dim)
 
         # some sensible defaults
         if "f_solver" not in solver_kwargs:
             solver_kwargs["f_solver"] = "fixed_point_iter"
         if "f_tol" not in solver_kwargs:
             solver_kwargs["f_tol"] = 1e-6
+        self.solver = torchdeq.get_deq(**solver_kwargs)
+
+    def forward(self, A_indices: torch.Tensor, A_values: torch.Tensor, b: torch.Tensor, x0: torch.Tensor):
+        assert A_values.dim() == b.dim() == x0.dim(), f"Expected A, b, and x0 to have same dimensionality."
+        assert A_values.dim() > 1, "Expected A, b, and x0 to have a batch dimension."
 
         b = b.type_as(A_values)
         x0 = x0.type_as(A_values)
 
-        solver = torchdeq.get_deq(**solver_kwargs)
         fixed_point = lambda x: self.propagate(A_indices, A=A_values, b=b, x=x)
-        x_list, info = solver(fixed_point, x0)
+        x_list, info = self.solver(fixed_point, x0)
 
         return x_list[-1], info
 

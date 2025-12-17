@@ -15,56 +15,64 @@ class RLFixedPoint(LinearFixedPoint):
 
 
 class RecursiveLogitRouteChoice(torch.nn.Module):
-    def __init__(self, encoder: torch.nn.Module, node_dim: int = -1):
+    def __init__(self, encoder: torch.nn.Module, node_dim: int = -1, **solver_kwargs):
         super().__init__()
 
+        assert node_dim < 0, "node_dim must be specified as a negative offset."
         self.node_dim = node_dim
 
         self.encoder = encoder
-        self.node_value = RLFixedPoint(node_dim=self.node_dim)
-        self.fixed_point = LinearFixedPoint(node_dim=self.node_dim)
+        self.node_value = RLFixedPoint(node_dim=self.node_dim, **solver_kwargs)
+        self.fixed_point = LinearFixedPoint(node_dim=self.node_dim, **solver_kwargs)
         self.edge_prob = EdgeProb(node_dim=self.node_dim)
 
     def forward(
-        self, edge_index: torch.Tensor, edge_feats: torch.Tensor, sink_node_mask: torch.Tensor, **solver_kwargs
+        self,
+        edge_index: torch.Tensor,
+        edge_feats: torch.Tensor,
+        sink_node_mask: torch.Tensor,
+        node_demand: torch.Tensor = None,
     ):
-        unscaled_rewards = self.encoder(edge_feats).squeeze(-1)
+        rewards = self.encoder(edge_feats).squeeze(-1)
+        values, edge_probs = self.get_values_and_probs(edge_index, rewards, sink_node_mask)
+        if node_demand is None:
+            return rewards, values, edge_probs
+        else:
+            node_flows, edge_flows = self.get_flows(edge_index, edge_probs, node_demand)
+            return rewards, values, edge_probs, node_flows, edge_flows
 
-        # we need to scale exp(reward) such that the sum over each row is < 1
+    def get_values_and_probs(self, edge_index: torch.Tensor, rewards: torch.Tensor, sink_node_mask: torch.Tensor):
+        assert (
+            rewards.dim() + self.node_dim > 0
+        ), "edge_rewards requires a batch dim, even if it is 1-dimensional! Use .unsqueeze(0)."
+        assert (
+            sink_node_mask.dim() + self.node_dim > 0
+        ), "sink_node_mask requires a batch dim, even if it is 1-dimensional! Use .unsqueeze(0)."
+
+        # scaling exp(reward) such that the sum over each row is < 1 guarantees convergence
         # see: https://pubsonline.informs.org/doi/full/10.1287/trsc.2022.1145
-        exp_unscaled_rewards = unscaled_rewards.exp()
-        sum_over_rows = scatter(exp_unscaled_rewards, edge_index[0], dim=self.node_dim, reduce="sum")
-        exp_rewards = exp_unscaled_rewards / sum_over_rows.max()
+        # however, it can also cause numerical issues depending on how f_tol is set
+        # TODO: not passing tests.
+        if False:
+            exp_unscaled_rewards = rewards.exp()
+            sum_over_rows = scatter(exp_unscaled_rewards, edge_index[0], dim=self.node_dim, reduce="sum")
+            row_max, _ = sum_over_rows.max(dim=self.node_dim, keepdim=True)
+            exp_rewards = exp_unscaled_rewards / row_max
+        else:
+            exp_rewards = rewards.exp()
 
-        values, edge_probs = self.get_values_and_probs(edge_index, exp_rewards, sink_node_mask, **solver_kwargs)
-        return exp_rewards.log(), values, edge_probs
-
-    def get_values_and_probs(
-        self, edge_index: torch.Tensor, exp_rewards: torch.Tensor, sink_node_mask: torch.Tensor, **solver_kwargs
-    ):
-
-        exp_values, _ = self.node_value(
-            edge_index,
-            exp_rewards.unsqueeze(0),
-            sink_node_mask.unsqueeze(0),
-            sink_node_mask.clone().unsqueeze(0),
-            **solver_kwargs
-        )
-        exp_values = exp_values.squeeze(0)
-
+        exp_values, _ = self.node_value(edge_index, exp_rewards, sink_node_mask, sink_node_mask.clone())
         edge_probs = self.edge_prob(edge_index, exp_rewards, exp_values, sink_node_mask)
-
         return exp_values.log(), edge_probs
 
-    def get_flows(self, edge_index: torch.Tensor, edge_probs: torch.Tensor, demand: torch.Tensor, **solver_kwargs):
-        node_flows, _ = self.fixed_point(
-            edge_index.flip(0),
-            edge_probs.unsqueeze(0),
-            demand.unsqueeze(0),
-            demand.clone().unsqueeze(0),
-            **solver_kwargs
-        )
-        node_flows = node_flows.squeeze(0)
+    def get_flows(self, edge_index: torch.Tensor, edge_probs: torch.Tensor, demand: torch.Tensor):
+        assert (
+            edge_probs.dim() + self.node_dim > 0
+        ), "exp_rewards requires a batch dim, even if it is 1-dimensional! Use .unsqueeze(0)."
+        assert (
+            demand.dim() + self.node_dim > 0
+        ), "sink_node_mask requires a batch dim, even if it is 1-dimensional! Use .unsqueeze(0)."
 
+        node_flows, _ = self.fixed_point(edge_index.flip(0), edge_probs, demand, demand.clone())
         edge_flows = node_flows.index_select(self.node_dim, edge_index[0]) * edge_probs
         return node_flows, edge_flows

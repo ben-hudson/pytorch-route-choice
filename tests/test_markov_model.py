@@ -15,13 +15,7 @@ def test_values_and_probs(small_network):
 
     rewards = -torch_graph.cost.unsqueeze(0)
     sink_node_mask = torch_graph.is_dest.unsqueeze(0)
-    values, probs = model.get_values_and_probs(
-        torch_graph.edge_index,
-        rewards.exp(),
-        sink_node_mask,
-        f_solver="fixed_point_iter",
-        f_tol=1e-5,
-    )
+    values, probs = model.get_values_and_probs(torch_graph.edge_index, rewards, sink_node_mask)
     assert torch.isclose(values, torch_graph.value, atol=1e-4).all()
     assert torch.isclose(probs, torch_graph.prob, atol=1e-4).all()
 
@@ -36,20 +30,8 @@ def test_flows(rl_tutorial_network):
 
     rewards = -2.0 * torch_graph.travel_time.unsqueeze(0) - 0.01
     sink_node_mask = torch_graph.is_dest.unsqueeze(0)
-    values, probs = model.get_values_and_probs(
-        torch_graph.edge_index,
-        rewards.exp(),
-        sink_node_mask,
-        f_solver="fixed_point_iter",
-        f_tol=1e-5,
-    )
+    values, probs = model.get_values_and_probs(torch_graph.edge_index, rewards, sink_node_mask)
 
     demand = torch_graph.is_orig.type_as(probs).unsqueeze(0) * 100
-    node_flows, edge_flows = model.get_flows(
-        torch_graph.edge_index,
-        probs,
-        demand,
-        f_solver="fixed_point_iter",
-        f_tol=1e-5,
-    )
+    node_flows, edge_flows = model.get_flows(torch_graph.edge_index, probs, demand)
     assert torch.isclose(edge_flows, torch_graph.flow, atol=1e-2).all()

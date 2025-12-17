@@ -32,7 +32,7 @@ if __name__ == "__main__":
     feats_np = feat_scaler.fit_transform(dataset.graph.edge_attr.numpy())
     feats = torch.as_tensor(feats_np, dtype=torch.float32).unsqueeze(0)
 
-    model = MarkovRouteChoice(torch.nn.Linear(len(feat_names), 1, bias=True))
+    model = MarkovRouteChoice(torch.nn.Linear(len(feat_names), 1, bias=True), ift=True)
     optim = torch.optim.Adam(model.parameters(), lr=1e-1)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optim, threshold=1e-4, threshold_mode="rel", patience=20, min_lr=1e-4
@@ -45,8 +45,8 @@ if __name__ == "__main__":
             model.train()
             optim.zero_grad()
 
-            reward, value, prob = model(dataset.edge_index, feats, dataset.sink_node_mask, ift=True)
-            node_flows, edge_flows = model.get_flows(dataset.edge_index, prob, dataset.demand, ift=True)
+            reward, value, prob = model(dataset.edge_index, feats, dataset.sink_node_mask)
+            node_flows, edge_flows = model.get_flows(dataset.edge_index, prob, dataset.demand)
 
             # since we oly have one destination here, we can use the edge flows as calculated.
             # otherwise, I think we would have to compare the feature counts per-destination.

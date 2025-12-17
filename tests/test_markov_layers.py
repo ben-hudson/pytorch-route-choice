@@ -17,14 +17,7 @@ def test_values_and_probs(small_network):
     rewards = -torch_graph.cost.unsqueeze(0)
     sink_node_mask = torch_graph.is_dest.type_as(rewards).unsqueeze(0)
 
-    exp_values, _ = fixed_point(
-        torch_graph.edge_index,
-        rewards.exp(),
-        sink_node_mask,
-        sink_node_mask.clone(),
-        f_solver="fixed_point_iter",
-        f_tol=1e-5,
-    )
+    exp_values, _ = fixed_point(torch_graph.edge_index, rewards.exp(), sink_node_mask, sink_node_mask.clone())
     values = exp_values.log()
     assert torch.isclose(values, torch_graph.value, atol=1e-4).all()
 
@@ -44,25 +37,12 @@ def test_flows(rl_tutorial_network):
     rewards = -2.0 * torch_graph.travel_time.unsqueeze(0) - 0.01
     sink_node_mask = torch_graph.is_dest.type_as(rewards).unsqueeze(0)
 
-    exp_values, _ = fixed_point(
-        torch_graph.edge_index,
-        rewards.exp(),
-        sink_node_mask,
-        sink_node_mask.clone(),
-        f_solver="fixed_point_iter",
-        f_tol=1e-5,
-    )
+    exp_values, _ = fixed_point(torch_graph.edge_index, rewards.exp(), sink_node_mask, sink_node_mask.clone())
     probs = edge_prob(torch_graph.edge_index, rewards.exp(), exp_values, sink_node_mask)
 
     demand = torch_graph.is_orig.type_as(rewards).unsqueeze(0) * 100
-    node_flows, _ = fixed_point(
-        torch_graph.edge_index.flip(0),  # transpose for COO matrices
-        probs,
-        demand,
-        demand.clone(),
-        f_solver="fixed_point_iter",
-        f_tol=1e-5,
-    )
+    # flip is transpose for COO matrices
+    node_flows, _ = fixed_point(torch_graph.edge_index.flip(0), probs, demand, demand.clone())
 
     edge_flows = node_flows.index_select(-1, torch_graph.edge_index[0]) * probs
     assert torch.isclose(edge_flows, torch_graph.flow, atol=1e-2).all()
