@@ -27,7 +27,7 @@ def sparse_incidence_matrix(
 ):
     if n_nodes is None:
         n_nodes = torch.unique(edge_index).size(0)
-    if n_edges:
+    if n_edges is None:
         n_edges = edge_index.size(1)
 
     edge_number = torch.arange(n_edges)
