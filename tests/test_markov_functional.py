@@ -13,9 +13,8 @@ def test_values_and_probs(small_network, method):
     torch_graph = torch_geometric.utils.from_networkx(small_network)
     shape = (torch_graph.num_nodes, torch_graph.num_nodes)
 
-    exp_values, _ = spsolve(
-        torch_graph.edge_index, (-torch_graph.cost).exp(), torch_graph.is_dest, shape, method=method
-    )
+    rewards = -torch_graph.cost
+    exp_values, _ = spsolve(torch_graph.edge_index, rewards.exp(), torch_graph.is_dest, shape, method=method)
     values = exp_values.log()
     assert torch.isclose(values, torch_graph.value, atol=1e-4).all()
 

@@ -1,7 +1,5 @@
 import torch
 
-from torch_geometric.utils import scatter
-
 from ..layers import EdgeProb, LinearFixedPoint
 
 
@@ -23,7 +21,7 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
 
         self.encoder = encoder
         self.node_value = RLFixedPoint(node_dim=self.node_dim, **solver_kwargs)
-        self.fixed_point = LinearFixedPoint(node_dim=self.node_dim, **solver_kwargs)
+        self.node_flow = LinearFixedPoint(node_dim=self.node_dim, **solver_kwargs)
         self.edge_prob = EdgeProb(node_dim=self.node_dim)
 
     def forward(
@@ -53,13 +51,7 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
         # see: https://pubsonline.informs.org/doi/full/10.1287/trsc.2022.1145
         # however, it can also cause numerical issues depending on how f_tol is set
         # TODO: not passing tests.
-        if False:
-            exp_unscaled_rewards = rewards.exp()
-            sum_over_rows = scatter(exp_unscaled_rewards, edge_index[0], dim=self.node_dim, reduce="sum")
-            row_max, _ = sum_over_rows.max(dim=self.node_dim, keepdim=True)
-            exp_rewards = exp_unscaled_rewards / row_max
-        else:
-            exp_rewards = rewards.exp()
+        exp_rewards = rewards.exp()
 
         exp_values, _ = self.node_value(edge_index, exp_rewards, sink_node_mask, sink_node_mask.clone())
         edge_probs = self.edge_prob(edge_index, exp_rewards, exp_values, sink_node_mask)
@@ -73,6 +65,6 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
             demand.dim() + self.node_dim > 0
         ), "sink_node_mask requires a batch dim, even if it is 1-dimensional! Use .unsqueeze(0)."
 
-        node_flows, _ = self.fixed_point(edge_index.flip(0), edge_probs, demand, demand.clone())
+        node_flows, _ = self.node_flow(edge_index.flip(0), edge_probs, demand, demand.clone())
         edge_flows = node_flows.index_select(self.node_dim, edge_index[0]) * edge_probs
         return node_flows, edge_flows
