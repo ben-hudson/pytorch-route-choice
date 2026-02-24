@@ -1,12 +1,13 @@
-import tntp
-import torchdeq
-import torch_geometric.utils
-import torch
-import osmnx
+import matplotlib.pyplot as plt
 import networkx as nx
+import osmnx
+import tntp
+import torch
+import torch_geometric.utils
+import torchdeq
 
-from urllib.parse import urljoin
 from route_choice import MarkovRouteChoice
+from urllib.parse import urljoin
 
 
 def bpr(free_flow_time, flow, capacity, b, power) -> torch.Tensor:
@@ -53,8 +54,8 @@ class DEQTraffic(torch.nn.Module):
             new_costs = bpr(free_flow_time, demand_flow, capacity, b, power)
             return self.step_size * new_costs + (1 - self.step_size) * costs
 
-        cost_list, _ = self.solver(dual_fixed_point_problem, initial_cost)
-        return cost_list[-1]
+        cost_list, info = self.solver(dual_fixed_point_problem, initial_cost)
+        return cost_list[-1], info
 
 
 if __name__ == "__main__":
@@ -82,7 +83,7 @@ if __name__ == "__main__":
 
     print("Solving for equilibrium link costs...")
     scaling_factor = 1000
-    costs = model.solve(
+    costs, info = model.solve(
         base_graph.edge_index,
         base_graph.free_flow_time.float().unsqueeze(0),
         base_graph.capacity.float().unsqueeze(0) / scaling_factor,
@@ -101,8 +102,21 @@ if __name__ == "__main__":
     print(f"  Max absolute error:  {absolute_error.max().item():.4f}")
     print(f"  Mean relative error: {relative_error.mean().item():.2%}")
 
-    # Plot computed equilibrium costs on the network
-    converged_cost_dict = {e: cost.item() for e, cost in zip(network.edges, costs)}
-    nx.set_edge_attributes(network, converged_cost_dict, "cost")
+    # Plot convergence and equilibrium costs side by side
+    fig, axes = plt.subplots(1, 2)
+
+    nstep = int(info["nstep"].max().item())
+    abs_trace = info["abs_trace"].squeeze(0)[:nstep]
+    axes[1].semilogy(abs_trace.numpy())
+    axes[1].set_xlabel("Iteration")
+    axes[1].set_ylabel("Absolute residual")
+    axes[1].set_title("Solver convergence")
+
+    nx.set_edge_attributes(network, dict(zip(network.edges, costs.tolist())), "cost")
     edge_color = osmnx.plot.get_edge_colors_by_attr(network, "cost", cmap="RdYlGn_r")
-    osmnx.plot.plot_graph(network, edge_color=edge_color, show=True)
+    axes[0].set_facecolor("k")
+    osmnx.plot.plot_graph(network, ax=axes[0], edge_color=edge_color, show=False)
+    axes[0].set_title("Equilibrium link costs")
+
+    plt.tight_layout()
+    plt.show()
