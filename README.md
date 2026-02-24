@@ -1,12 +1,12 @@
 # pytorch-route-choice
 
-PyTorch implementations of route choice models for transportation networks. Sparse operations via [PyTorch Geometric](https://pyg.org/) and implicit differentiation via [torchdeq](https://github.com/locuslab/torchdeq).
+PyTorch implementations of route choice models for transportation networks. Sparse operations via [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/) and implicit differentiation via [torchdeq](https://github.com/locuslab/torchdeq).
 
 ## Models
 
-- **RecursiveLogitRouteChoice** (aliased as `MarkovRouteChoice`): link-based network route choice ([Fosgerau et al., 2013](https://pubsonline.informs.org/doi/abs/10.1287/trsc.1120.0443)), also can implement Maximum Entropy IRL ([Ziebart et al., 2008](https://cdn.aaai.org/AAAI/2008/AAAI08-227.pdf)).
-- **NestedRecursiveLogitRouteChoice**: nested recursive logit with link-specific scale parameters ([Mai et al., 2015](https://www.sciencedirect.com/science/article/abs/pii/S0191261515000582)).
-- **PerturbedUtilityRouteChoice**: perturbed utility route choice ([Fosgerau et al., 2022](https://doi.org/10.1016/j.trb.2022.03.006)).
+- **RecursiveLogitRouteChoice** (aliased as `MarkovRouteChoice`): link-based network route choice ([Fosgerau et al., 2013](https://www.sciencedirect.com/science/article/pii/S0191261513001276)), can also implement Maximum Entropy IRL ([Ziebart et al., 2008](https://dl.acm.org/doi/abs/10.5555/1620270.1620297)).
+- **NestedRecursiveLogitRouteChoice**: nested recursive logit with link-specific scale parameters ([Mai et al., 2015](https://www.sciencedirect.com/science/article/pii/S0191261515000582)).
+- **PerturbedUtilityRouteChoice**: perturbed utility route choice ([Fosgerau et al., 2022](https://www.sciencedirect.com/science/article/pii/S0968090X21004976)).
 
 ## Installation
 
