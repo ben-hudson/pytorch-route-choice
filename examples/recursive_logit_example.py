@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt
+import networkx as nx
 import torch
 import tqdm
 
@@ -53,4 +55,22 @@ if __name__ == "__main__":
         reward, value, prob = model(dataset.edge_index, feats, dataset.sink_node_mask)
         _, pred_flows = model.get_flows(dataset.edge_index, prob, dataset.demand)
         reconstruction_loss = torch.nn.functional.mse_loss(observed_flows, pred_flows.squeeze(0))
-        print("Edge flow reconstruction MSE:", reconstruction_loss)
+        print("Edge flow reconstruction MSE:", reconstruction_loss.item())
+
+    # Plot learned network values
+    fig, ax = plt.subplots()
+
+    pos = nx.get_node_attributes(network, "pos")
+    node_values = value.squeeze(0).numpy()
+    edge_probs = prob.squeeze(0).numpy()
+    edge_widths = 1 + 4 * edge_probs / edge_probs.max()
+
+    nodes = nx.draw_networkx_nodes(network, pos, ax=ax, node_color=node_values, cmap="viridis", node_size=300)
+    nx.draw_networkx_edges(network, pos, ax=ax, width=edge_widths, alpha=0.7, edge_color="gray")
+    nx.draw_networkx_labels(network, pos, ax=ax, font_size=8, font_color="white")
+    fig.colorbar(nodes, ax=ax, label="Node value (log)")
+    ax.set_title("Learned node values & edge probabilities")
+    ax.axis("off")
+
+    plt.tight_layout()
+    plt.show()

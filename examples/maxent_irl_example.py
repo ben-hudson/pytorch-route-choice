@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt
+import networkx as nx
 import torch
 import tqdm
 
@@ -6,10 +8,9 @@ from sklearn.preprocessing import StandardScaler
 
 # MaxEnt IRL (Ziebart et al., 2008) is almost the same as the Recursive Logit (Fosgerau et al., 2013) model.
 # The MDP is defined in terms of a single origin with many possible destinations in MaxEnt IRL.
-# This is backwards from how it is defined in the Recursive Logit (i.e. Markovian) model.
+# This is backwards from how it is defined in the Recursive Logit model so we reverse the network in this example.
 # The other difference is the loss: MaxEnt IRL optimizes the expected feature counts.
-# For example, the expectation of the travel time (a feature) summed along the route.
-# This is a harder task than using the states and transitions directly, so we expect a higher reconstruction loss.
+# In our example, we use the state transition frequency (the edge flows) as the only feature.
 if __name__ == "__main__":
     network = load_rl_tutorial_network().reverse()
     demand = {"d": 1}
@@ -48,7 +49,7 @@ if __name__ == "__main__":
             reward, value, prob = model(dataset.edge_index, feats, dataset.sink_node_mask)
             node_flows, edge_flows = model.get_flows(dataset.edge_index, prob, dataset.demand)
 
-            # since we oly have one destination here, we can use the edge flows as calculated.
+            # since we only have one destination here, we can use the edge flows as calculated.
             # otherwise, I think we would have to compare the feature counts per-destination.
             observed_feats = (paths.unsqueeze(-1) * feats).mean()
             pred_feats = (edge_flows.unsqueeze(-1) * feats).mean()
@@ -68,4 +69,23 @@ if __name__ == "__main__":
         reward, value, prob = model(dataset.edge_index, feats, dataset.sink_node_mask)
         _, pred_flows = model.get_flows(dataset.edge_index, prob, dataset.demand)
         reconstruction_loss = torch.nn.functional.mse_loss(observed_flows, pred_flows.squeeze(0))
-        print("Edge flow reconstruction MSE:", reconstruction_loss)
+        print("Edge flow reconstruction MSE:", reconstruction_loss.item())
+
+    # Plot learned network values
+    # Draw on the reversed network to keep edge ordering consistent with prob tensor
+    fig, ax = plt.subplots()
+
+    pos = nx.get_node_attributes(network, "pos")
+    node_values = value.squeeze(0).numpy()
+    edge_probs = prob.squeeze(0).numpy()
+    edge_widths = 1 + 4 * edge_probs / edge_probs.max()
+
+    nodes = nx.draw_networkx_nodes(network, pos, ax=ax, node_color=node_values, cmap="viridis", node_size=300)
+    nx.draw_networkx_edges(network, pos, ax=ax, width=edge_widths, alpha=0.7, edge_color="gray")
+    nx.draw_networkx_labels(network, pos, ax=ax, font_size=8, font_color="white")
+    fig.colorbar(nodes, ax=ax, label="Node value (log)")
+    ax.set_title("Learned node values & edge probabilities")
+    ax.axis("off")
+
+    plt.tight_layout()
+    plt.show()
