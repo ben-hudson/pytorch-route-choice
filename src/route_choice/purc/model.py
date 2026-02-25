@@ -2,6 +2,20 @@ import torch
 
 
 class PerturbedUtilityRouteChoice(torch.nn.Module):
+    """Perturbed utility route choice model (Fosgerau et al., 2022).
+
+    Learns utility rates from observed edge flows by projecting out the
+    equilibrium constraints via the network incidence matrix. The model solves
+    a least-squares problem in the nullspace of the flow conservation
+    constraints.
+
+    Args:
+        n_feats: Number of edge features.
+        regularizer: Regularization function applied to flows.
+            - ``"entropy"``: ``(1 + x) * ln(1 + x) - x``
+            - ``"square"`` / ``"l2"``: ``x^2``
+    """
+
     def __init__(self, n_feats: int, regularizer: str = "entropy"):
         super().__init__()
 
@@ -18,6 +32,25 @@ class PerturbedUtilityRouteChoice(torch.nn.Module):
     def forward(
         self, incidence_matrix: torch.Tensor, edge_lengths: torch.Tensor, feats: torch.Tensor, flows: torch.Tensor
     ):
+        """Compute projected residuals and least-squares loss.
+
+        Projects the regularized cost and feature vectors into the nullspace of
+        the incidence matrix (zeroing out flow conservation directions), then
+        computes residuals between projected costs and projected features
+        weighted by the learned utility rates.
+
+        Args:
+            incidence_matrix: Node-edge incidence matrix of shape
+                ``[num_nodes, num_edges]``.
+            edge_lengths: Edge lengths of shape ``[num_edges]``.
+            feats: Edge features of shape ``[batch, num_edges, num_features]``.
+            flows: Observed edge flows of shape ``[batch, num_edges]``.
+
+        Returns:
+            A tuple of (residuals, loss) where residuals has shape
+            ``[batch, num_edges]`` and loss is a scalar sum of squared
+            residuals.
+        """
         batch_size, n_edges = flows.shape
 
         A = incidence_matrix.expand(batch_size, *incidence_matrix.shape)
@@ -42,6 +75,20 @@ class PerturbedUtilityRouteChoice(torch.nn.Module):
         return residuals, loss
 
     def util_rate(self, feats: torch.Tensor, min: float = -1, max: float = 0):
+        """Compute utility rates from edge features, scaled to a given range.
+
+        Applies the learned weight vector to the features and rescales the
+        result to lie within ``[min, max]`` via min-max normalization.
+
+        Args:
+            feats: Edge features of shape ``[num_edges, num_features]``.
+            min: Lower bound of the output range. Defaults to ``-1``.
+            max: Upper bound of the output range. Must be ``<= 0`` (utilities
+                are negative). Defaults to ``0``.
+
+        Returns:
+            Scaled utility rates of shape ``[num_edges, 1]``.
+        """
         assert max <= 0, "max must be less or equal to zero (utilities are negative)"
         assert max > min, "max must be greater than min"
 

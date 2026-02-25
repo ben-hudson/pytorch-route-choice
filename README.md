@@ -4,7 +4,7 @@ PyTorch implementations of route choice models for transportation networks. Spar
 
 ## Models
 
-- **RecursiveLogitRouteChoice** (aliased as `MarkovRouteChoice`): link-based network route choice ([Fosgerau et al., 2013](https://www.sciencedirect.com/science/article/pii/S0191261513001276)), can also implement Maximum Entropy IRL ([Ziebart et al., 2008](https://dl.acm.org/doi/abs/10.5555/1620270.1620297)).
+- **RecursiveLogitRouteChoice**: link-based route choice ([Fosgerau et al., 2013](https://www.sciencedirect.com/science/article/pii/S0191261513001276)). Can also implement Maximum Entropy IRL ([Ziebart et al., 2008](https://dl.acm.org/doi/abs/10.5555/1620270.1620297)).
 - **NestedRecursiveLogitRouteChoice**: nested recursive logit with link-specific scale parameters ([Mai et al., 2015](https://www.sciencedirect.com/science/article/pii/S0191261515000582)).
 - **PerturbedUtilityRouteChoice**: perturbed utility route choice ([Fosgerau et al., 2022](https://www.sciencedirect.com/science/article/pii/S0968090X21004976)).
 

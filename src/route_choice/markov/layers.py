@@ -6,32 +6,20 @@ from torch_geometric.utils import scatter
 
 
 class LinearFixedPoint(MessagePassing):
-    """Solves a linear fixed-point problem x = Ax + b using message passing.
+    """Solve a linear fixed-point problem x = Ax + b using message passing.
 
-    This class implements a linear fixed-point solver using PyTorch Geometric's MessagePassing
-    framework. It iteratively solves equations of the form x = Ax + b, where A is a sparse
-    matrix represented via edge indices and values (COO format), and b is a vector.
+    Uses PyTorch Geometric's MessagePassing framework to perform sparse
+    matrix multiplicaition. The fixed-point solver from torchdeq enables
+    implicit differentiation through the solution in the backward pass.
 
     Args:
-        **kwargs: Additional keyword arguments passed to MessagePassing base class.
+        node_dim: Dimension along which nodes are indexed (negative offset to
+            support batched operations). Defaults to ``-1``.
+        **solver_kwargs: Keyword arguments passed to :func:`torchdeq.get_deq`.
+            Defaults to ``f_solver="fixed_point_iter"`` and ``f_tol=1e-6`` if
+            not specified.
 
-    Methods:
-        forward(A_indices, A_values, b, x0, **solver_kwargs):
-            Solves the fixed-point problem using the specified solver.
-
-            Args:
-                A_indices (torch.Tensor): Indices of shape [2, num_edges]
-                A_values (torch.Tensor): Values of shape [num_edges]
-                b (torch.Tensor): Bias vector of shape [num_nodes]
-                x0 (torch.Tensor): Initial guess for the solution of shape [num_nodes]
-                **solver_kwargs: Additional arguments passed to the DEQ solver
-
-            Returns:
-                tuple: (solution, solver_info) where:
-                    - solution is the final fixed point x*
-                    - solver_info contains solver statistics
-
-    Examples:
+    Example:
         >>> solver = LinearFixedPoint()
         >>> x_star, info = solver(A.indices(), A.values(), b, x0)
     """
@@ -47,6 +35,20 @@ class LinearFixedPoint(MessagePassing):
         self.solver = torchdeq.get_deq(**solver_kwargs)
 
     def forward(self, A_indices: torch.Tensor, A_values: torch.Tensor, b: torch.Tensor, x0: torch.Tensor):
+        """Solve the fixed-point problem x = Ax + b.
+
+        All inputs must include a batch dimension.
+
+        Args:
+            A_indices: Edge indices of shape ``[2, num_edges]``.
+            A_values: Edge values of shape ``[batch, num_edges]``.
+            b: Bias vector of shape ``[batch, num_nodes]``.
+            x0: Initial guess of shape ``[batch, num_nodes]``.
+
+        Returns:
+            A tuple of (solution, info) where solution is the fixed point
+            x* and info contains solver convergence statistics.
+        """
         assert A_values.dim() == b.dim() == x0.dim(), f"Expected A, b, and x0 to have same dimensionality."
         assert A_values.dim() > 1, "Expected A, b, and x0 to have a batch dimension."
 
@@ -59,36 +61,34 @@ class LinearFixedPoint(MessagePassing):
         return x_list[-1], info
 
     def message(self, A: torch.Tensor, x_j: torch.Tensor):
+        """Compute messages as element-wise product of edge values and source node states."""
         return A * x_j
 
     def update(self, Ax: torch.Tensor, b: torch.Tensor):
+        """Add bias vector to aggregated messages to complete one fixed-point iteration."""
         return Ax + b
 
 
 class EdgeProb(MessagePassing):
-    """Compute edge probabilities in a graph using message passing.
+    """Compute edge transition probabilities using message passing.
 
-    This class implements a numerically stable way to compute edge probabilities,
-    avoiding the log-exp operations used in torch_geometric.utils.softmax.
-    It uses target-to-source message passing to calculate probabilities based on
-    edge rewards and node values.
+    Computes the probability of traversing each edge in a graph, operating in
+    the exponentiated domain for numerical stability (avoids log-exp round-trips
+    used by :func:`torch_geometric.utils.softmax`).
 
-    The probability of taking each edge is computed as:
+    The probability of taking each edge is::
+
         P(edge) = exp(Q(edge)) / sum(exp(Q(outgoing_edges)))
-    where Q(edge) = reward(edge) + value(target_node)
+
+    where ``Q(edge) = reward(edge) + value(target_node)``. Edges outgoing from
+    sink nodes are assigned zero probability.
 
     Args:
-        **kwargs: Additional keyword arguments passed to MessagePassing base class
-
-    Attributes:
-        None
-
-    Methods:
-        forward(edge_index, exp_rewards, exp_values): Computes edge probabilities
+        **kwargs: Keyword arguments passed to the ``MessagePassing`` base class.
 
     Example:
         >>> edge_prob = EdgeProb()
-        >>> probs = edge_prob(edge_index, rewards.exp(), values.exp())
+        >>> probs = edge_prob(edge_index, rewards.exp(), values.exp(), sink_mask)
     """
 
     def __init__(self, **kwargs):
@@ -101,6 +101,17 @@ class EdgeProb(MessagePassing):
         exp_values: torch.Tensor,
         sink_node_mask: torch.Tensor,
     ):
+        """Compute transition probabilities for all edges.
+
+        Args:
+            edge_index: Edge indices of shape ``[2, num_edges]``.
+            exp_rewards: Exponentiated edge rewards of shape ``[num_edges]``.
+            exp_values: Exponentiated node values of shape ``[num_nodes]``.
+            sink_node_mask: Boolean mask indicating sink (absorbing) nodes.
+
+        Returns:
+            Edge probabilities of shape ``[num_edges]``.
+        """
         prob = self.edge_updater(edge_index, exp_reward=exp_rewards, exp_value=exp_values, is_sink_node=sink_node_mask)
         return prob
 
@@ -113,6 +124,11 @@ class EdgeProb(MessagePassing):
         ptr: torch.Tensor = None,
         dim_size: int = None,
     ):
+        """Compute per-edge probabilities via softmax over outgoing edges.
+
+        Normalizes ``exp(reward) * exp(value_target)`` over all outgoing edges
+        of each source node, then zeros out edges from sink nodes.
+        """
         exp_Q = exp_reward * exp_value_j
         sum_over_edges = scatter(exp_Q, index, dim=self.node_dim, reduce="sum")
         prob = exp_Q / sum_over_edges.index_select(self.node_dim, index)
