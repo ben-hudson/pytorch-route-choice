@@ -1,5 +1,6 @@
 import torch
 import torchdeq
+import warnings
 
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import scatter
@@ -57,6 +58,12 @@ class LinearFixedPoint(MessagePassing):
 
         fixed_point = lambda x: self.propagate(A_indices, A=A_values, b=b, x=x)
         x_list, info = self.solver(fixed_point, x0)
+
+        stop_mode = self.solver.f_stop_mode
+        tolerance = self.solver.f_tol
+        lowest_error = info[f"{stop_mode}_lowest"].max()
+        if lowest_error > tolerance:
+            warnings.warn(f"Solver did not converge: {stop_mode} error {lowest_error:.2e} > tol {tolerance}.")
 
         return x_list[-1], info
 
