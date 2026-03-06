@@ -1,7 +1,22 @@
 import torch
 import torchdeq
 
-from .recursive_logit import RLFixedPoint, RecursiveLogitRouteChoice
+from ..layers import LinearFixedPoint
+from .recursive_logit import RecursiveLogitRouteChoice
+
+
+class RLFixedPoint(LinearFixedPoint):
+    """Fixed-point solver specialized for the recursive logit value function.
+
+    Overrides the update step to enforce that sink (terminal) node values remain
+    at zero (i.e. ``exp(0) = 1`` in the exponentiated domain). This avoids
+    needing to modify the graph structure to handle absorbing states.
+    """
+
+    def update(self, Ax: torch.Tensor, b: torch.Tensor):
+        """Set sink node values to 1 (exp(0)) instead of accumulating messages."""
+        Ax[b.bool()] = 1.0
+        return Ax
 
 
 class NRLFixedPoint(RLFixedPoint):

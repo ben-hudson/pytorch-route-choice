@@ -3,41 +3,6 @@ import torch
 from ..layers import DenseSolve, EdgeProb, LinearFixedPoint
 
 
-class RLFixedPoint(LinearFixedPoint):
-    """Fixed-point solver specialized for the recursive logit value function.
-
-    Overrides the update step to enforce that sink (terminal) node values remain
-    at zero (i.e. ``exp(0) = 1`` in the exponentiated domain). This avoids
-    needing to modify the graph structure to handle absorbing states.
-    """
-
-    def update(self, Ax: torch.Tensor, b: torch.Tensor):
-        """Set sink node values to 1 (exp(0)) instead of accumulating messages.
-
-        In the recursive logit model, b is a one-hot vector indicating the
-        terminal state. There are no edges leaving the terminal state, and its
-        value is always 0 (exp(0) = 1). To avoid modifying the underlying
-        network, we override the value at the terminal state directly.
-        """
-        Ax[b.bool()] = 1.0
-        return Ax
-
-
-class RLDenseSolve(DenseSolve):
-    """Dense solver specialized for the recursive logit value function.
-
-    Zeros out edges originating from sink nodes before solving, so that
-    sink node values resolve to ``b[sink] = 1``. This mirrors the boundary
-    condition in :class:`RLFixedPoint`.
-    """
-
-    def forward(self, edge_index, edge_values, b, x0):
-        # Value at sink node is always zero, so we need to remove edges leaving the sink node
-        leaves_sink_node = b.bool().index_select(-1, edge_index[0])
-        edge_values = edge_values.masked_fill(leaves_sink_node, 0.0)
-        return super().forward(edge_index, edge_values, b, x0)
-
-
 class RecursiveLogitRouteChoice(torch.nn.Module):
     """Recursive logit route choice model (Fosgerau et al., 2013).
 
@@ -69,11 +34,9 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
 
         self.encoder = encoder
         if solver == "direct":
-            self.node_value = RLDenseSolve(node_dim=self.node_dim)
-            self.node_flow = DenseSolve(node_dim=self.node_dim)
+            self.linear_solver = DenseSolve(node_dim=self.node_dim)
         elif solver == "fixed_point":
-            self.node_value = RLFixedPoint(node_dim=self.node_dim, **solver_kwargs)
-            self.node_flow = LinearFixedPoint(node_dim=self.node_dim, **solver_kwargs)
+            self.linear_solver = LinearFixedPoint(node_dim=self.node_dim, **solver_kwargs)
         else:
             raise ValueError(f"Unknown solver: {solver!r}. Expected 'fixed_point' or 'direct'.")
         self.edge_prob = EdgeProb(node_dim=self.node_dim)
@@ -133,7 +96,10 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
         ), "sink_node_mask requires a batch dim, even if it is 1-dimensional! Use .unsqueeze(0)."
 
         exp_rewards = rewards.exp()
-        exp_values, _ = self.node_value(edge_index, exp_rewards, sink_node_mask, sink_node_mask.clone())
+        # There is no reward for leaving the sink node as it is the terminal state.
+        leaves_sink_node = sink_node_mask.bool().index_select(-1, edge_index[0])
+        exp_rewards = exp_rewards.masked_fill(leaves_sink_node, 0.0)
+        exp_values, _ = self.linear_solver(edge_index, exp_rewards, sink_node_mask, sink_node_mask.clone())
         edge_probs = self.edge_prob(edge_index, exp_rewards, exp_values, sink_node_mask)
         return exp_values.log(), edge_probs
 
@@ -160,6 +126,6 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
             demand.dim() + self.node_dim > 0
         ), "sink_node_mask requires a batch dim, even if it is 1-dimensional! Use .unsqueeze(0)."
 
-        node_flows, _ = self.node_flow(edge_index.flip(0), edge_probs, demand, demand.clone())
+        node_flows, _ = self.linear_solver(edge_index.flip(0), edge_probs, demand, demand.clone())
         edge_flows = node_flows.index_select(self.node_dim, edge_index[0]) * edge_probs
         return node_flows, edge_flows
