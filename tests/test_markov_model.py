@@ -1,3 +1,4 @@
+import networkx as nx
 import pytest
 import torch
 import torch_geometric.utils
@@ -5,13 +6,14 @@ import torch_geometric.utils
 from route_choice.markov.models.recursive_logit import RecursiveLogitRouteChoice
 
 
+@pytest.mark.parametrize("solver", ["fixed_point", "direct"])
 @pytest.mark.parametrize("small_network", [{"cyclic": False}, {"cyclic": True}], indirect=True)
-def test_values_and_probs(small_network):
+def test_values_and_probs(small_network, solver):
     for n in small_network.nodes:
         small_network.nodes[n]["is_dest"] = n == 4
     torch_graph = torch_geometric.utils.from_networkx(small_network)
 
-    model = RecursiveLogitRouteChoice(None, node_dim=-1)
+    model = RecursiveLogitRouteChoice(None, node_dim=-1, solver=solver)
 
     rewards = -torch_graph.cost.unsqueeze(0)
     sink_node_mask = torch_graph.is_dest.unsqueeze(0)
@@ -20,13 +22,14 @@ def test_values_and_probs(small_network):
     assert torch.isclose(probs, torch_graph.prob, atol=1e-4).all()
 
 
-def test_flows(rl_tutorial_network):
+@pytest.mark.parametrize("solver", ["fixed_point", "direct"])
+def test_flows(rl_tutorial_network, solver):
     for n in rl_tutorial_network.nodes:
         rl_tutorial_network.nodes[n]["is_orig"] = n == "o"
         rl_tutorial_network.nodes[n]["is_dest"] = n == "d"
     torch_graph = torch_geometric.utils.from_networkx(rl_tutorial_network)
 
-    model = RecursiveLogitRouteChoice(None, node_dim=-1)
+    model = RecursiveLogitRouteChoice(None, node_dim=-1, solver=solver)
 
     rewards = -2.0 * torch_graph.travel_time.unsqueeze(0) - 0.01
     sink_node_mask = torch_graph.is_dest.unsqueeze(0)

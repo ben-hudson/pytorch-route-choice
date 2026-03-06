@@ -3,7 +3,7 @@ import torchdeq
 import warnings
 
 from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import scatter
+from torch_geometric.utils import scatter, to_dense_adj
 
 
 class LinearFixedPoint(MessagePassing):
@@ -62,6 +62,8 @@ class LinearFixedPoint(MessagePassing):
         stop_mode = self.solver.f_stop_mode
         tolerance = self.solver.f_tol
         lowest_error = info[f"{stop_mode}_lowest"].max()
+        if lowest_error.isnan():
+            raise RuntimeError("Solver produced NaN values. Check that inputs are finite and the system is well-conditioned.")
         if lowest_error > tolerance:
             warnings.warn(f"Solver did not converge: {stop_mode} error {lowest_error:.2e} > tol {tolerance}.")
 
@@ -74,6 +76,58 @@ class LinearFixedPoint(MessagePassing):
     def update(self, Ax: torch.Tensor, b: torch.Tensor):
         """Add bias vector to aggregated messages to complete one fixed-point iteration."""
         return Ax + b
+
+
+class DenseSolve(torch.nn.Module):
+    """Dense linear solver for the fixed-point equation ``x = Ax + b``.
+
+    Builds a dense transition matrix from sparse edge data and solves
+    ``(I - A) * x = b`` using ``torch.linalg.solve``. This guarantees
+    convergence regardless of the spectral radius of A and supports
+    autograd differentiation.
+
+    Drop-in replacement for :class:`LinearFixedPoint`.
+
+    Args:
+        node_dim: Dimension along which nodes are indexed. Must be ``-1``.
+    """
+
+    def __init__(self, node_dim: int = -1):
+        super().__init__()
+        if node_dim != -1:
+            raise ValueError("DenseSolve only supports node_dim=-1.")
+
+    def forward(
+        self,
+        edge_index: torch.Tensor,
+        edge_values: torch.Tensor,
+        b: torch.Tensor,
+        x0: torch.Tensor,
+    ):
+        """Solve ``(I - M) * x = b`` via dense linear solve.
+
+        Args:
+            edge_index: Edge indices of shape ``[2, num_edges]``.
+            edge_values: Edge weights of shape ``[batch, num_edges]``.
+            b: Right-hand side of shape ``[batch, num_nodes]``.
+            x0: Initial guess (unused, accepted for interface compatibility).
+
+        Returns:
+            A tuple of ``(solution, info)`` where solution has shape
+            ``[batch, num_nodes]`` and info is an empty dict.
+        """
+        num_nodes = b.size(-1)
+
+        # to_dense_adj with [E, B] edge_attr produces [1, N, N, B]; move batch dim to front
+        M = to_dense_adj(edge_index, edge_attr=edge_values.movedim(0, -1), max_num_nodes=num_nodes)
+        M = M.squeeze(0).movedim(-1, 0)
+
+        identity = torch.eye(num_nodes, device=M.device, dtype=M.dtype).unsqueeze(0)
+        coefficient_matrix = identity - M
+        rhs = b.type_as(edge_values).unsqueeze(-1)
+
+        solution = torch.linalg.solve(coefficient_matrix, rhs).squeeze(-1)
+        return solution, {}
 
 
 class EdgeProb(MessagePassing):

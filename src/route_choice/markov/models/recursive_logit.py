@@ -1,6 +1,6 @@
 import torch
 
-from ..layers import EdgeProb, LinearFixedPoint
+from ..layers import DenseSolve, EdgeProb, LinearFixedPoint
 
 
 class RLFixedPoint(LinearFixedPoint):
@@ -23,30 +23,59 @@ class RLFixedPoint(LinearFixedPoint):
         return Ax
 
 
+class RLDenseSolve(DenseSolve):
+    """Dense solver specialized for the recursive logit value function.
+
+    Zeros out edges originating from sink nodes before solving, so that
+    sink node values resolve to ``b[sink] = 1``. This mirrors the boundary
+    condition in :class:`RLFixedPoint`.
+    """
+
+    def forward(self, edge_index, edge_values, b, x0):
+        # Value at sink node is always zero, so we need to remove edges leaving the sink node
+        leaves_sink_node = b.bool().index_select(-1, edge_index[0])
+        edge_values = edge_values.masked_fill(leaves_sink_node, 0.0)
+        return super().forward(edge_index, edge_values, b, x0)
+
+
 class RecursiveLogitRouteChoice(torch.nn.Module):
     """Recursive logit route choice model (Fosgerau et al., 2013).
 
     Computes node values, edge transition probabilities, and (optionally) edge
     flows on a directed graph. An encoder module maps edge features to scalar
-    rewards, which are then used to solve a Bellman-like value function via
-    fixed-point iteration.
+    rewards, which are then used to solve a Bellman-like value function.
 
     Args:
         encoder: Module that maps edge features to scalar rewards.
         node_dim: Dimension along which nodes are indexed (negative offset to
             support batched operations). Defaults to ``-1``.
+        solver: Method to solve the linear systems. ``"fixed_point"``
+            uses iterative fixed-point solving (default). ``"direct"`` uses
+            a dense linear solve via ``torch.linalg.solve``.
         **solver_kwargs: Keyword arguments passed to the fixed-point solvers.
     """
 
-    def __init__(self, encoder: torch.nn.Module, node_dim: int = -1, **solver_kwargs):
+    def __init__(
+        self,
+        encoder: torch.nn.Module,
+        node_dim: int = -1,
+        solver: str = "fixed_point",
+        **solver_kwargs,
+    ):
         super().__init__()
 
         assert node_dim < 0, "node_dim must be specified as a negative offset."
         self.node_dim = node_dim
 
         self.encoder = encoder
-        self.node_value = RLFixedPoint(node_dim=self.node_dim, **solver_kwargs)
-        self.node_flow = LinearFixedPoint(node_dim=self.node_dim, **solver_kwargs)
+        if solver == "direct":
+            self.node_value = RLDenseSolve(node_dim=self.node_dim)
+            self.node_flow = DenseSolve(node_dim=self.node_dim)
+        elif solver == "fixed_point":
+            self.node_value = RLFixedPoint(node_dim=self.node_dim, **solver_kwargs)
+            self.node_flow = LinearFixedPoint(node_dim=self.node_dim, **solver_kwargs)
+        else:
+            raise ValueError(f"Unknown solver: {solver!r}. Expected 'fixed_point' or 'direct'.")
         self.edge_prob = EdgeProb(node_dim=self.node_dim)
 
     def forward(
@@ -70,7 +99,8 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
             ``(rewards, values, edge_probs)`` if ``node_demand`` is None,
             otherwise ``(rewards, values, edge_probs, node_flows, edge_flows)``.
         """
-        rewards = self.encoder(edge_feats).squeeze(-1)
+        # Flatten batch and edge dims in case encoder has batch norm
+        rewards = self.encoder(edge_feats.flatten(end_dim=-2)).reshape(edge_feats.shape[:-1])
         values, edge_probs = self.get_values_and_probs(edge_index, rewards, sink_node_mask)
         if node_demand is None:
             return rewards, values, edge_probs
@@ -102,12 +132,7 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
             sink_node_mask.dim() + self.node_dim > 0
         ), "sink_node_mask requires a batch dim, even if it is 1-dimensional! Use .unsqueeze(0)."
 
-        # scaling exp(reward) such that the sum over each row is < 1 guarantees convergence
-        # see: https://pubsonline.informs.org/doi/full/10.1287/trsc.2022.1145
-        # however, it can also cause numerical issues depending on how f_tol is set
-        # TODO: not passing tests.
         exp_rewards = rewards.exp()
-
         exp_values, _ = self.node_value(edge_index, exp_rewards, sink_node_mask, sink_node_mask.clone())
         edge_probs = self.edge_prob(edge_index, exp_rewards, exp_values, sink_node_mask)
         return exp_values.log(), edge_probs
