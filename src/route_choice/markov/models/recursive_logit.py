@@ -51,6 +51,9 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
             **solver_kwargs
         )
         exp_values = exp_values.squeeze(0)
+        # if there are zeros (-inf post log) fill them with the min value
+        zero_mask = exp_values == 0
+        exp_values.masked_fill_(zero_mask, exp_values[~zero_mask].min())
 
         edge_probs = self.edge_prob(edge_index, exp_rewards, exp_values, sink_node_mask)
 
