@@ -61,12 +61,17 @@ class LinearFixedPoint(MessagePassing):
 
         stop_mode = self.solver.f_stop_mode
         tolerance = self.solver.f_tol
-        lowest_error = info[f"{stop_mode}_lowest"].max()
-        if lowest_error.isnan():
-            raise RuntimeError("Solver produced NaN values. Check that inputs are finite and the system is well-conditioned.")
-        if lowest_error > tolerance:
-            warnings.warn(f"Solver did not converge: {stop_mode} error {lowest_error:.2e} > tol {tolerance}.")
+        error = info[f"{stop_mode}_lowest"]
+        converged = error <= tolerance
+        if error.isnan().any():
+            warnings.warn(
+                f"Solver produced {error.isnan().sum()} NaN values. Check that inputs are finite and the system is well-conditioned."
+            )
+        elif not converged.all():
+            warnings.warn(f"Solver did not converge: {stop_mode} error {error.max():.2e} > tol {tolerance}.")
 
+        # nans show up as false in converged, so we don't need to add them
+        info["converged"] = converged
         return x_list[-1], info
 
     def message(self, A: torch.Tensor, x_j: torch.Tensor):
@@ -116,7 +121,7 @@ class DenseSolve(torch.nn.Module):
             A tuple of ``(solution, info)`` where solution has shape
             ``[batch, num_nodes]`` and info is an empty dict.
         """
-        num_nodes = b.size(-1)
+        batch_size, num_nodes = b.shape
 
         # to_dense_adj with [E, B] edge_attr produces [1, N, N, B]; move batch dim to front
         M = to_dense_adj(edge_index, edge_attr=edge_values.movedim(0, -1), max_num_nodes=num_nodes)
@@ -127,7 +132,8 @@ class DenseSolve(torch.nn.Module):
         rhs = b.type_as(edge_values).unsqueeze(-1)
 
         solution = torch.linalg.solve(coefficient_matrix, rhs).squeeze(-1)
-        return solution, {}
+        info = {"converged": torch.ones(batch_size, dtype=torch.bool, device=solution.device)}
+        return solution, info
 
 
 class EdgeProb(MessagePassing):
@@ -193,5 +199,6 @@ class EdgeProb(MessagePassing):
         exp_Q = exp_reward * exp_value_j
         sum_over_edges = scatter(exp_Q, index, dim=self.node_dim, reduce="sum")
         prob = exp_Q / sum_over_edges.index_select(self.node_dim, index)
+        prob = prob.nan_to_num(0.0)  # all outgoing exp(V) underflowed to 0 → 0/0 → NaN → 0
         prob[is_sink_node_i.bool()] = 0.0  # gotcha
         return prob

@@ -47,8 +47,8 @@ class DEQTraffic(torch.nn.Module):
             initial_cost = free_flow_time.clone()
 
         def dual_fixed_point_problem(costs):
-            _, probs = self.route_choice_model.get_values_and_probs(edge_index, -costs, sink_node_mask)
-            _, edge_flows = self.route_choice_model.get_flows(edge_index, probs, demand)
+            _, probs, _ = self.route_choice_model.get_values_and_probs(edge_index, -costs, sink_node_mask)
+            _, edge_flows, _ = self.route_choice_model.get_flows(edge_index, probs, demand)
             demand_flow = edge_flows.sum(dim=self.dest_dim, keepdim=True)
 
             new_costs = bpr(free_flow_time, demand_flow, capacity, b, power)

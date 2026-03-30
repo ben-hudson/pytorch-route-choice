@@ -33,12 +33,12 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
         self.node_dim = node_dim
 
         self.encoder = encoder
-        if solver == "direct":
+        if solver == "dense":
             self.linear_solver = DenseSolve(node_dim=self.node_dim)
         elif solver == "fixed_point":
             self.linear_solver = LinearFixedPoint(node_dim=self.node_dim, **solver_kwargs)
         else:
-            raise ValueError(f"Unknown solver: {solver!r}. Expected 'fixed_point' or 'direct'.")
+            raise ValueError(f"Unknown solver: {solver!r}. Expected 'fixed_point' or 'dense'.")
         self.edge_prob = EdgeProb(node_dim=self.node_dim)
 
     def forward(
@@ -64,12 +64,13 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
         """
         # Flatten batch and edge dims in case encoder has batch norm
         rewards = self.encoder(edge_feats.flatten(end_dim=-2)).reshape(edge_feats.shape[:-1])
-        values, edge_probs = self.get_values_and_probs(edge_index, rewards, sink_node_mask)
+        values, edge_probs, info = self.get_values_and_probs(edge_index, rewards, sink_node_mask)
         if node_demand is None:
-            return rewards, values, edge_probs
+            return rewards, values, edge_probs, info
         else:
-            node_flows, edge_flows = self.get_flows(edge_index, edge_probs, node_demand)
-            return rewards, values, edge_probs, node_flows, edge_flows
+            node_flows, edge_flows, flows_info = self.get_flows(edge_index, edge_probs, node_demand)
+            info["converged"] = info["converged"] & flows_info["converged"]
+            return rewards, values, edge_probs, node_flows, edge_flows, info
 
     def get_values_and_probs(self, edge_index: torch.Tensor, rewards: torch.Tensor, sink_node_mask: torch.Tensor):
         """Compute node values and edge transition probabilities from rewards.
@@ -95,13 +96,13 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
             sink_node_mask.dim() + self.node_dim > 0
         ), "sink_node_mask requires a batch dim, even if it is 1-dimensional! Use .unsqueeze(0)."
 
-        exp_rewards = rewards.exp()
         # There is no reward for leaving the sink node as it is the terminal state.
         leaves_sink_node = sink_node_mask.bool().index_select(-1, edge_index[0])
-        exp_rewards = exp_rewards.masked_fill(leaves_sink_node, 0.0)
-        exp_values, _ = self.linear_solver(edge_index, exp_rewards, sink_node_mask, sink_node_mask.clone())
+        exp_rewards = rewards.exp().masked_fill(leaves_sink_node, 0.0)
+        exp_values, info = self.linear_solver(edge_index, exp_rewards, sink_node_mask, sink_node_mask.clone())
+
         edge_probs = self.edge_prob(edge_index, exp_rewards, exp_values, sink_node_mask)
-        return exp_values.log(), edge_probs
+        return exp_values.log(), edge_probs, info
 
     def get_flows(self, edge_index: torch.Tensor, edge_probs: torch.Tensor, demand: torch.Tensor):
         """Compute node and edge flows from transition probabilities and demand.
@@ -126,6 +127,6 @@ class RecursiveLogitRouteChoice(torch.nn.Module):
             demand.dim() + self.node_dim > 0
         ), "sink_node_mask requires a batch dim, even if it is 1-dimensional! Use .unsqueeze(0)."
 
-        node_flows, _ = self.linear_solver(edge_index.flip(0), edge_probs, demand, demand.clone())
+        node_flows, info = self.linear_solver(edge_index.flip(0), edge_probs, demand, demand.clone())
         edge_flows = node_flows.index_select(self.node_dim, edge_index[0]) * edge_probs
-        return node_flows, edge_flows
+        return node_flows, edge_flows, info

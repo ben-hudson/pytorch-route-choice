@@ -37,7 +37,7 @@ if __name__ == "__main__":
             model.train()
             optim.zero_grad()
 
-            reward, value, prob = model(dataset.edge_index, feats, dataset.sink_node_mask)
+            reward, value, prob, _ = model(dataset.edge_index, feats, dataset.sink_node_mask)
             probs = prob.expand_as(paths)
             loss = -probs[paths.bool()].log().sum()
 
@@ -52,8 +52,8 @@ if __name__ == "__main__":
     with torch.no_grad():
         model.eval()
         observed_flows = dataset.tensors[1].float().mean(dim=0)
-        reward, value, prob = model(dataset.edge_index, feats, dataset.sink_node_mask)
-        _, pred_flows = model.get_flows(dataset.edge_index, prob, dataset.demand)
+        reward, value, prob, _ = model(dataset.edge_index, feats, dataset.sink_node_mask)
+        _, pred_flows, _ = model.get_flows(dataset.edge_index, prob, dataset.demand)
         reconstruction_loss = torch.nn.functional.mse_loss(observed_flows, pred_flows.squeeze(0))
         print("Edge flow reconstruction MSE:", reconstruction_loss.item())
 
