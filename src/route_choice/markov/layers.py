@@ -5,6 +5,8 @@ import warnings
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import scatter, to_dense_adj
 
+MIN_DENOMINATOR = 1e-30  # keeps the sink-node softmax division nonzero (finite fwd + bwd)
+
 
 class LinearFixedPoint(MessagePassing):
     """Solve a linear fixed-point problem x = Ax + b using message passing.
@@ -198,7 +200,12 @@ class EdgeProb(MessagePassing):
         """
         exp_Q = exp_reward * exp_value_j
         sum_over_edges = scatter(exp_Q, index, dim=self.node_dim, reduce="sum")
-        prob = exp_Q / sum_over_edges.index_select(self.node_dim, index)
-        prob = prob.nan_to_num(0.0)  # all outgoing exp(V) underflowed to 0 → 0/0 → NaN → 0
-        prob[is_sink_node_i.bool()] = 0.0  # gotcha
+        # Clamp the denominator away from zero. A sink node's outgoing rewards are masked to 0 upstream,
+        # so its outgoing exp_Q all vanish and sum_over_edges == 0 -- an unclamped division is then 0/0,
+        # which produces a finite forward but a NaN backward (d prob / d sum = -exp_Q / sum**2 = 0 * inf)
+        # that poisons any Jacobian taken through these probs. The clamp keeps the division finite in both
+        # directions without perturbing legitimate O(1) sums.
+        outgoing_sum = sum_over_edges.index_select(self.node_dim, index).clamp_min(MIN_DENOMINATOR)
+        prob = exp_Q / outgoing_sum
+        prob[is_sink_node_i.bool()] = 0.0  # sink nodes are absorbing: zero outgoing probability
         return prob
