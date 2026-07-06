@@ -30,7 +30,7 @@ def sparse_incidence_matrix(
     if n_edges is None:
         n_edges = edge_index.size(1)
 
-    edge_number = torch.arange(n_edges)
+    edge_number = torch.arange(n_edges, device=edge_index.device)
 
     tails = -torch.ones_like(edge_index[0])
     heads = torch.ones_like(edge_index[1])

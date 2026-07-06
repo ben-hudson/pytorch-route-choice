@@ -57,7 +57,14 @@ class LinearFixedPoint(MessagePassing):
         x0 = x0.type_as(A_values)
 
         fixed_point = lambda x: self.propagate(A_indices, A=A_values, b=b, x=x)
-        x_list, info = self.solver(fixed_point, x0)
+        try:
+            x_list, info = self.solver(fixed_point, x0)
+        except RuntimeError as e:
+            # Degrade gracefully: return NaNs marked as not converged rather than crashing.
+            warnings.warn(f"Solver failed with error: {e}")
+            x = torch.full_like(x0, torch.nan)
+            info = {"converged": x.new_zeros(x.size(0), dtype=torch.bool)}
+            return x, info
 
         stop_mode = self.solver.f_stop_mode
         tolerance = self.solver.f_tol
